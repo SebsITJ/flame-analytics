@@ -71,6 +71,16 @@ Full dependency pins are in `uv.lock`.
 - **During development:** AI tools assisted with: the user interface (UI), the connectors, the subagent and the AI
   schema, and the database preparation; the rest was developed by the OCEANPIXELS team.
 
+## Team OCEANPIXELS
+
+| Name | Major | GitHub |
+|---|---|---|
+| Jeanpiere Castro | Mechanical Engineering | [@customerservicesastrotech-wq](https://github.com/customerservicesastrotech-wq) |
+| Sebastián Tumbaco | Electronics and Automation Engineering | [@SebsITJ](https://github.com/SebsITJ) |
+| Dylan Rosales | Mechatronics Engineering | [@dylanrosalesasc-cmd](https://github.com/dylanrosalesasc-cmd) |
+| Miguel Carpio | Naval Engineering | [@Micaez](https://github.com/Micaez) |
+| Jacob Gaviño | Chemical Engineering | [@JaanG-95](https://github.com/JaanG-95) |
+
 ## Documentation in Spanish
 
 `README_ES.md` / `LEEME_PRIMERO.md` (step-by-step guide), `COMO_CORRER.txt`, `CAMBIOS_OCULTAR.md`,
