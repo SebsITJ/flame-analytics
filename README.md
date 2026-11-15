@@ -1,5 +1,7 @@
 # Flame Analytics
 
+**Live demo:** https://flame-analytics.onrender.com (free hosting; the first visit may take about 30–50 seconds to wake up). You can also run it locally; see below.
+
 **Evidence-based decision-support tool built on NASA PSI microgravity combustion data.**
 Built for the NASA Space Apps Challenge 2026 by the OCEANPIXELS team.
 
