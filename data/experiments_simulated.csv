@@ -1,0 +1,6 @@
+experimento,combustible,oxigeno,presion,resultado,fase,fuente
+SIMULATED-01 (FLEX-style test row),n-heptane,21,1.0,"[SIMULATED] Droplet flame extinguished after CO2 dilution of the chamber; time to extinction 12 s (made-up value)",extinguish,SIMULATED - not a NASA source
+SIMULATED-02 (FLEX-style test row),n-heptane,30,0.7,"[SIMULATED] Flame kept burning through the test window; no extinction observed (made-up result)",extinguish,SIMULATED - not a NASA source
+SIMULATED-03 (FLEX-style test row),methanol,21,1.0,"[SIMULATED] Helium dilution extinguished the flame; time to extinction 8 s (made-up value)",extinguish,SIMULATED - not a NASA source
+SIMULATED-04 (test row),n-decane,40,0.7,"[SIMULATED] Ignition on first attempt; flame spread faster than at 21 % O2 (made-up result)",prevent,SIMULATED - not a NASA source
+SIMULATED-05 (test row),PMMA,21,1.0,"[SIMULATED] Smoke sensor signal recorded before a flame was visible on camera (made-up result)",detect,SIMULATED - not a NASA source

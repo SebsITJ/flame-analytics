@@ -1,0 +1,13 @@
+# Secrets: never commit the Gemini key
+.env
+*.env
+.streamlit/secrets.toml
+secrets.toml
+# Python / tools
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+# Logs
+*.log
+logs/

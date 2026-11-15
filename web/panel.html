@@ -1,0 +1,1309 @@
+<!DOCTYPE html>
+<!--
+================================================================================
+  FLAME IN FREEFALL · team OCEANPIXELS
+  NASA Space Apps Challenge 2026 entry. Independent project — not affiliated
+  with or endorsed by NASA. No NASA logos or marks are used.
+
+  Single self-contained page: inline CSS + JS, no build step, no CDNs.
+
+  DATA CONTRACT
+  -------------
+  Request:
+    POST /api/ask
+    Content-Type: application/json
+    { "question": "Does methanol extinguish at 21% O2?", "lang": "en" | "es" }
+
+  Response (JSON) — every field except `verdict` and `evidence` is optional;
+  render(data) degrades gracefully when something is missing.
+
+  {
+    "question": "Does methanol extinguish at 21% O2?",
+    "lang": "en",
+    "phase": "PREVENT" | "DETECT" | "EXTINGUISH",
+    "verdict": {
+      "numerator": 7,                     // e.g. tests extinguished
+      "denominator": 8,                   // e.g. matching tests
+      "headline": "7/8",                  // optional, defaults to "num/den"
+      "label": "methanol tests extinguished",
+      "summary": "One-sentence plain-language answer.",
+      "confidence": "high" | "medium" | "low"
+    },
+    "interpretation": "Paragraph text. Cite with [R1] (row) or [E2] (experiment).\n\nBlank line = new paragraph.",
+    "evidence": [
+      {
+        "id": "R1",                       // must match citation tokens
+        "kind": "row" | "experiment",
+        "platform": "ISS" | "Cygnus" | string,
+        "experiment": "run / campaign label",
+        "fuel": "methanol",
+        "o2_pct": 21.0,                   // number, or a string range like "14–40"
+        "diluent": "N2",
+        "pressure_atm": 1.0,
+        "d0_mm": 2.1,                     // initial droplet diameter (nullable)
+        "outcome": "extinguished" | "sustained" | "mixed",
+        "t_ext_s": 3.8,                   // time to extinction (nullable)
+        "n": 62, "ext": 41,               // experiment-level counts (optional)
+        "note": "free text (optional)"
+      }
+    ],
+    "oxygen": {
+      "query_o2_pct": 21,                 // nullable — vertical marker on the chart
+      "bins": [ { "o2_pct": 21, "extinguished": 7, "total": 8 } ]
+    },
+    "diluents": [ { "name": "CO2", "extinguished": 64, "total": 75 } ],
+    "model_trace": { "answered_by": "plain badge for the user", "fallback_used": false },
+    "actions": [ { "phase": "DETECT", "priority": "high" | "medium" | "low", "text": "…" } ]
+  }
+
+  If the request fails, times out or returns an invalid shape, the page shows no
+  answer and a banner asking to start the local server (no made-up numbers).
+================================================================================
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#04060b">
+<title>Flame in Freefall · OCEANPIXELS</title>
+<meta name="description" content="AI tool over 1,982 microgravity combustion experiment rows to prevent, detect and extinguish fires in spacecraft. NASA Space Apps Challenge 2026 entry by team OCEANPIXELS.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%2304060b'/%3E%3Ccircle cx='16' cy='16' r='9.5' fill='none' stroke='%235cc8ff' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%23ffb347'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#04060b; --panel:#0a111d; --panel2:#0d1627; --line:#17233a; --line2:#24345a;
+  --text:#e4ebf6; --muted:#8a99b2; --dim:#5a6880;
+  --cyan:#5cc8ff; --blue:#3d7bff; --amber:#ffb347; --orange:#ff7a3d; --green:#3ddc97; --red:#ff5b6b;
+  --prevent:#3ddc97; --detect:#ffb347; --extinguish:#5cc8ff;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --r:16px;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-padding-top:84px}
+body{
+  margin:0;min-height:100vh;color:var(--text);font:15px/1.55 var(--sans);
+  background:
+    radial-gradient(1100px 620px at 78% -12%,rgba(61,123,255,.14),transparent 60%),
+    radial-gradient(800px 520px at -12% 112%,rgba(255,122,61,.07),transparent 60%),
+    var(--bg);
+  overflow-x:hidden;
+}
+.stars{position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.5;
+  background-image:
+    radial-gradient(1px 1px at 23px 41px,#fff9,transparent 60%),
+    radial-gradient(1px 1px at 141px 97px,#cfe6ff99,transparent 60%),
+    radial-gradient(1.4px 1.4px at 201px 183px,#fff,transparent 60%),
+    radial-gradient(1px 1px at 77px 211px,#fff8,transparent 60%),
+    radial-gradient(1px 1px at 251px 21px,#bcd9ff,transparent 60%),
+    radial-gradient(1.2px 1.2px at 311px 151px,#ffe6c9aa,transparent 60%);
+  background-size:340px 260px}
+.grid-bg{position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.35;
+  background-image:linear-gradient(rgba(92,200,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(92,200,255,.05) 1px,transparent 1px);
+  background-size:44px 44px;
+  -webkit-mask-image:radial-gradient(ellipse at 50% 20%,#000 0%,transparent 70%);mask-image:radial-gradient(ellipse at 50% 20%,#000 0%,transparent 70%)}
+.wrap{position:relative;z-index:1;width:100%;max-width:1240px;margin:0 auto;padding:0 24px}
+.mono{font-family:var(--mono)}
+.sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.skip{position:absolute;left:12px;top:-60px;z-index:100;background:var(--cyan);color:#001;padding:8px 12px;border-radius:8px;font-weight:600}
+.skip:focus{top:12px}
+:focus-visible{outline:2px solid var(--cyan);outline-offset:2px;border-radius:6px}
+button{font:inherit;color:inherit;cursor:pointer}
+[hidden]{display:none!important}
+
+/* ---------- top bar ---------- */
+.topbar{position:sticky;top:0;z-index:20;background:rgba(4,6,11,.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+.topbar-in{display:flex;align-items:center;justify-content:space-between;gap:12px;height:64px}
+.brand{display:flex;align-items:center;gap:12px;color:var(--text);text-decoration:none;min-width:0}
+.logo{width:36px;height:36px;flex:none}
+.brand-text{display:flex;flex-direction:column;line-height:1.15;min-width:0}
+.brand-text strong{font-size:16px;letter-spacing:.01em}
+.brand-text small{color:var(--muted);font:11px/1.3 var(--mono);letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top-right{display:flex;align-items:center;gap:10px}
+.pill{display:inline-flex;align-items:center;gap:7px;padding:4px 10px;border-radius:999px;border:1px solid var(--line2);font:600 11px/1.4 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.status i{width:7px;height:7px;border-radius:50%;background:var(--dim)}
+.status[data-state="live"]{color:var(--green);border-color:rgba(61,220,151,.35)}
+.status[data-state="live"] i{background:var(--green);box-shadow:0 0 8px var(--green)}
+.status[data-state="demo"]{color:var(--amber);border-color:rgba(255,179,71,.35)}
+.status[data-state="demo"] i{background:var(--amber);box-shadow:0 0 8px var(--amber)}
+.status[data-state="busy"] i{background:var(--cyan);animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.25}}
+.lang{display:flex;padding:3px;border:1px solid var(--line2);border-radius:999px;background:var(--panel)}
+.lang button{border:0;background:transparent;padding:4px 11px;border-radius:999px;font:600 12px/1.4 var(--mono);color:var(--muted);letter-spacing:.05em}
+.lang button[aria-pressed="true"]{background:var(--cyan);color:#021018}
+
+/* ---------- common ---------- */
+.eyebrow{display:inline-flex;align-items:center;gap:8px;margin:0 0 12px;font:600 11px/1.4 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--cyan)}
+.eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+.stage{position:relative;z-index:1;animation:stageIn .45s ease both}
+@keyframes stageIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.btn-primary{display:inline-flex;align-items:center;gap:10px;border:0;border-radius:12px;padding:12px 20px;font-weight:650;color:#021018;
+  background:linear-gradient(135deg,#7fd7ff,#3d9dff);box-shadow:0 6px 24px -8px rgba(92,200,255,.7),inset 0 1px 0 rgba(255,255,255,.35);transition:transform .15s,box-shadow .15s}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 10px 30px -8px rgba(92,200,255,.85),inset 0 1px 0 rgba(255,255,255,.35)}
+.btn-primary:disabled{opacity:.6;cursor:wait;transform:none}
+.btn-primary svg{width:16px;height:16px}
+.btn-ghost{display:inline-flex;align-items:center;gap:8px;padding:9px 14px;border-radius:10px;border:1px solid var(--line2);background:rgba(13,22,39,.6);font-weight:600;font-size:13px;color:var(--text);transition:border-color .15s,background .15s}
+.btn-ghost:hover{border-color:var(--cyan);background:rgba(92,200,255,.08)}
+
+/* ---------- ASK ---------- */
+.ask{padding:56px 24px 40px}
+.ask-hero{position:relative;max-width:760px}
+.orb{position:absolute;right:-300px;top:-30px;width:230px;height:230px;border-radius:50%;pointer-events:none;
+  background:radial-gradient(circle,rgba(0,0,0,0) 52%,rgba(61,123,255,.25) 64%,rgba(140,210,255,.9) 70%,rgba(61,123,255,.15) 76%,transparent 82%),
+             radial-gradient(circle,rgba(255,150,60,.0) 30%,rgba(255,150,60,.22) 42%,transparent 52%);
+  filter:drop-shadow(0 0 40px rgba(61,123,255,.45));animation:breathe 5s ease-in-out infinite}
+.orb span{position:absolute;left:50%;top:50%;width:14px;height:14px;margin:-7px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#c9d6e8,#5d6b80 70%)}
+@keyframes breathe{50%{transform:scale(1.04)}}
+h1{margin:0 0 14px;font-size:clamp(34px,6vw,60px);line-height:1.02;letter-spacing:-.025em;font-weight:750;
+  background:linear-gradient(180deg,#fff,#b9cbe6);-webkit-background-clip:text;background-clip:text;color:transparent}
+h1:focus{outline:none}
+.lead{margin:0;max-width:620px;color:var(--muted);font-size:17px}
+.askbox{margin-top:32px;max-width:860px;border:1px solid var(--line2);border-radius:20px;background:linear-gradient(180deg,rgba(13,22,39,.9),rgba(10,17,29,.9));
+  box-shadow:0 20px 60px -30px rgba(61,123,255,.6);transition:border-color .2s,box-shadow .2s}
+.askbox:focus-within{border-color:rgba(92,200,255,.6);box-shadow:0 20px 70px -25px rgba(92,200,255,.55),0 0 0 4px rgba(92,200,255,.08)}
+.askbox textarea{display:block;width:100%;min-height:110px;resize:vertical;border:0;background:transparent;color:var(--text);
+  padding:22px 22px 8px;font:500 clamp(18px,2.4vw,22px)/1.4 var(--sans);outline:none}
+.askbox textarea::placeholder{color:var(--dim)}
+.askbox.shake{animation:shake .35s}
+@keyframes shake{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+.askbox-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px 12px 22px}
+.hint{color:var(--dim);font-size:11px;letter-spacing:.04em}
+.chips-wrap{margin-top:22px;max-width:860px}
+.label{margin:0 0 10px;font:600 11px/1.4 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--line2);background:rgba(13,22,39,.7);color:var(--text);border-radius:999px;padding:8px 14px;font-size:13.5px;text-align:left;transition:border-color .15s,background .15s,transform .15s}
+.chip:hover{border-color:var(--cyan);background:rgba(92,200,255,.08);transform:translateY(-1px)}
+.chip .fx{color:var(--cyan);margin-right:6px;font-family:var(--mono)}
+.pillars{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:44px}
+.pillar{border:1px solid var(--line);border-radius:var(--r);padding:18px;background:rgba(10,17,29,.6);position:relative;overflow:hidden}
+.pillar::before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:var(--pc)}
+.pillar h3{margin:0 0 6px;font:700 12px/1.4 var(--mono);letter-spacing:.16em;color:var(--pc)}
+.pillar p{margin:0;color:var(--muted);font-size:14px}
+.stats{display:flex;flex-wrap:wrap;gap:28px;margin:28px 0 0;padding:0}
+.stats div{display:flex;flex-direction:column}
+.stats dt{order:2;color:var(--dim);font:11px/1.4 var(--mono);letter-spacing:.1em;text-transform:uppercase}
+.stats dd{order:1;margin:0;font:700 24px/1.2 var(--mono);color:var(--text)}
+
+/* ---------- ANIMATION ---------- */
+.anim{padding:40px 24px 60px;display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:28px;align-items:center;min-height:calc(100vh - 64px - 120px)}
+.anim-frame{position:relative;aspect-ratio:4/3;border:1px solid var(--line2);border-radius:20px;overflow:hidden;
+  background:radial-gradient(circle at 50% 50%,#08101f 0%,#030509 75%)}
+.anim-frame canvas{position:absolute;inset:0;width:100%;height:100%}
+.anim-frame::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(0deg,rgba(255,255,255,.018) 0 1px,transparent 1px 3px)}
+.hud{position:absolute;font-size:11px;letter-spacing:.08em;color:rgba(160,205,255,.75);text-transform:uppercase;line-height:1.6}
+.hud-tl{top:14px;left:16px}.hud-tr{top:14px;right:16px;text-align:right}
+.hud-bl{bottom:14px;left:16px}.hud-br{bottom:14px;right:16px;text-align:right}
+.hud b{color:#fff;font-weight:600}
+.rec{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--red);margin-right:6px;animation:pulse 1s infinite;vertical-align:1px}
+.anim-q{font-size:clamp(20px,2.6vw,26px);font-weight:650;line-height:1.3;margin:0 0 22px;color:#fff}
+.steps{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.steps li{display:flex;align-items:center;gap:12px;font:13px/1.4 var(--mono);color:var(--dim);transition:color .3s}
+.steps li::before{content:"";flex:none;width:16px;height:16px;border-radius:50%;border:1.5px solid var(--line2);transition:all .3s}
+.steps li.active{color:var(--text)}
+.steps li.active::before{border-color:var(--cyan);border-top-color:transparent;animation:spin .8s linear infinite}
+.steps li.done{color:var(--muted)}
+.steps li.done::before{border-color:var(--green);background:var(--green) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8.5l2.5 2.5L12 5.5' fill='none' stroke='%23021018' stroke-width='2'/%3E%3C/svg%3E") center/12px no-repeat}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ---------- DASHBOARD ---------- */
+.dash{padding:32px 24px 40px}
+.dash-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:18px}
+.dash-head h2{margin:0;font-size:clamp(20px,3vw,28px);line-height:1.25;letter-spacing:-.01em}
+.dash-head h2:focus{outline:none}
+.dash-head-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.banner{display:flex;gap:10px;align-items:flex-start;margin-bottom:16px;padding:12px 14px;border-radius:12px;border:1px solid rgba(255,179,71,.35);background:rgba(255,179,71,.07);color:#ffd9a3;font-size:13.5px}
+.banner::before{content:"!";flex:none;width:20px;height:20px;border-radius:50%;background:var(--amber);color:#1a1000;font:800 12px/20px var(--mono);text-align:center}
+.grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px}
+.span-5{grid-column:span 5}.span-7{grid-column:span 7}.span-12{grid-column:span 12}
+.card{min-width:0;border:1px solid var(--line);border-radius:var(--r);background:linear-gradient(180deg,rgba(13,22,39,.85),rgba(10,17,29,.85));padding:20px;position:relative;animation:stageIn .5s ease both}
+.card:nth-child(2){animation-delay:.05s}.card:nth-child(3){animation-delay:.1s}.card:nth-child(4){animation-delay:.15s}
+.card:nth-child(5){animation-delay:.2s}.card:nth-child(6){animation-delay:.25s}.card:nth-child(7){animation-delay:.3s}.card:nth-child(8){animation-delay:.35s}
+.card-h{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
+.card-h .pill{min-width:0;max-width:58%;overflow:hidden;text-overflow:ellipsis}
+.card-h h3{margin:0;font:700 11.5px/1.4 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+.sub{margin:-8px 0 14px;color:var(--dim);font-size:12.5px}
+
+/* verdict */
+.verdict-body{display:flex;align-items:center;gap:22px}
+.ring{width:132px;height:132px;flex:none}
+.ring .track{stroke:var(--line2)}
+.ring .val{stroke:url(#ringGrad);stroke-linecap:round;transition:stroke-dashoffset 1.1s cubic-bezier(.2,.8,.2,1)}
+.v-headline{margin:0;font:800 clamp(40px,6vw,56px)/1 var(--mono);letter-spacing:-.03em;color:#fff}
+.v-label{margin:6px 0 8px;font-weight:650;color:var(--cyan)}
+.v-sum{margin:0;color:var(--muted);font-size:14px}
+.conf[data-c="high"]{color:var(--green);border-color:rgba(61,220,151,.35)}
+.conf[data-c="medium"]{color:var(--amber);border-color:rgba(255,179,71,.35)}
+.conf[data-c="low"]{color:var(--red);border-color:rgba(255,91,107,.35)}
+
+/* phase */
+.phase-track{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.ph{position:relative;padding:14px 12px;border-radius:12px;border:1px solid var(--line);background:rgba(4,6,11,.4);color:var(--dim);transition:all .3s}
+.ph b{display:block;font:800 13px/1.2 var(--mono);letter-spacing:.14em}
+.ph small{display:block;margin-top:4px;font-size:12px;line-height:1.35}
+.ph.on{color:var(--text);border-color:var(--pc);background:linear-gradient(180deg,color-mix(in srgb,var(--pc) 18%,transparent),transparent);box-shadow:0 0 0 1px var(--pc) inset,0 10px 30px -14px var(--pc)}
+.ph.on b{color:var(--pc)}
+.ph.on::after{content:"";position:absolute;top:10px;right:10px;width:8px;height:8px;border-radius:50%;background:var(--pc);box-shadow:0 0 10px var(--pc);animation:pulse 1.6s infinite}
+.phase-desc{margin:0;color:var(--muted);font-size:14px}
+[data-phase="PREVENT"]{--pc:var(--prevent)}[data-phase="DETECT"]{--pc:var(--detect)}[data-phase="EXTINGUISH"]{--pc:var(--extinguish)}
+
+/* interpretation */
+.interp p{margin:0 0 12px;font-size:15.5px;line-height:1.7;color:#d3ddec}
+.interp p:last-child{margin-bottom:0}
+.cite{display:inline-flex;align-items:center;margin:0 2px;padding:0 7px;height:21px;vertical-align:1px;border-radius:6px;border:1px solid rgba(92,200,255,.4);background:rgba(92,200,255,.1);color:var(--cyan);font:700 11.5px/1 var(--mono);transition:background .15s,transform .15s}
+.cite[data-kind="experiment"]{border-color:rgba(255,179,71,.45);background:rgba(255,179,71,.1);color:var(--amber)}
+.cite:hover{background:rgba(92,200,255,.22);transform:translateY(-1px)}
+.cite[data-kind="experiment"]:hover{background:rgba(255,179,71,.22)}
+.cite-hint{margin:14px 0 0;color:var(--dim);font-size:12px}
+
+/* actions */
+.actions{list-style:none;margin:0;padding:0;display:grid;gap:10px;counter-reset:a}
+.actions li{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;padding:12px;border-radius:12px;border:1px solid var(--line);background:rgba(4,6,11,.35);counter-increment:a}
+.actions li::before{content:counter(a,decimal-leading-zero);grid-row:span 2;font:700 13px/1.6 var(--mono);color:var(--dim)}
+.a-meta{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.tag{padding:2px 8px;border-radius:6px;font:700 10.5px/1.5 var(--mono);letter-spacing:.1em;color:var(--pc);background:color-mix(in srgb,var(--pc) 13%,transparent);border:1px solid color-mix(in srgb,var(--pc) 35%,transparent)}
+.prio{font:600 10.5px/1.5 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.prio[data-p="high"]{color:var(--red)}
+.actions p{margin:0;font-size:14px;color:#d3ddec}
+
+/* charts */
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.chart text{font-family:var(--mono);font-size:11px;fill:var(--dim)}
+.chart .ax{stroke:var(--line2)}
+.chart .gl{stroke:var(--line);stroke-dasharray:2 4}
+.chart .ln{fill:none;stroke:var(--cyan);stroke-width:2.2;stroke-linejoin:round}
+.chart .ar{fill:url(#areaGrad)}
+.chart .pt{fill:#0a111d;stroke:var(--cyan);stroke-width:2;transition:r .15s}
+.chart .pt:hover{fill:var(--cyan)}
+.chart .q{stroke:var(--amber);stroke-dasharray:4 4;stroke-width:1.5}
+.chart .qt{fill:var(--amber);font-weight:700}
+.chart .th{stroke:rgba(255,255,255,.18);stroke-dasharray:3 5}
+.chart .thd{fill:#fff}
+.chart .tht{fill:#fff;font-weight:700}
+.chart .pl{fill:var(--muted);font-size:10px}
+.empty{color:var(--dim);font-size:13px;padding:24px 0;text-align:center}
+
+/* diluent bars */
+.dil{display:grid;gap:18px}
+.dil-row{display:grid;grid-template-columns:52px 1fr;gap:6px 14px;align-items:center}
+.dil-name{font:800 16px/1 var(--mono);color:#fff}
+.dil-track{position:relative;height:26px;border-radius:7px;background:rgba(4,6,11,.6);border:1px solid var(--line);overflow:hidden}
+.dil-fill{position:absolute;inset:0 auto 0 0;width:0;border-radius:6px;background:linear-gradient(90deg,rgba(61,123,255,.55),var(--cyan));transition:width 1s cubic-bezier(.2,.8,.2,1)}
+.dil-ci{position:absolute;top:50%;height:2px;margin-top:-1px;background:rgba(255,255,255,.75)}
+.dil-ci::before,.dil-ci::after{content:"";position:absolute;top:-5px;width:2px;height:12px;background:rgba(255,255,255,.75)}
+.dil-ci::before{left:0}.dil-ci::after{right:0}
+.dil-meta{grid-column:2;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font:12px/1.4 var(--mono);color:var(--muted)}
+.dil-meta b{color:var(--text)}
+.badge{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:5px;font:700 10px/1.6 var(--mono);letter-spacing:.06em;text-transform:uppercase}
+.badge.best{color:var(--green);background:rgba(61,220,151,.12)}
+.badge.top{color:var(--amber);background:rgba(255,179,71,.12)}
+.scale{display:flex;justify-content:space-between;margin:2px 0 0 66px;font:10px/1 var(--mono);color:var(--dim)}
+
+/* evidence */
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;min-width:820px;font-size:13.5px}
+th,td{padding:10px 12px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--line)}
+th{position:sticky;top:0;background:#0b1424;font:700 10.5px/1.4 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+td.num{font-family:var(--mono);text-align:right}
+th.num{text-align:right}
+tbody tr:last-child td{border-bottom:0}
+tbody tr{transition:background .3s}
+tbody tr:hover{background:rgba(92,200,255,.04)}
+tbody tr.kind-experiment{background:rgba(255,179,71,.035)}
+tbody tr:focus{outline:none}
+tbody tr.flash{animation:flash 1.8s ease}
+@keyframes flash{0%,40%{background:rgba(92,200,255,.22);box-shadow:inset 3px 0 0 var(--cyan)}100%{background:transparent}}
+.idc{font:800 12px/1 var(--mono);color:var(--cyan)}
+.kind-experiment .idc{color:var(--amber)}
+.exp{display:block;font-size:12px;color:var(--dim);font-family:var(--mono)}
+.out{display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:12.5px}
+.out::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.out[data-o="extinguished"]{color:var(--cyan)}
+.out[data-o="sustained"]{color:var(--orange)}
+.out[data-o="mixed"]{color:var(--amber)}
+.note{color:var(--dim);font-size:12px;white-space:normal;min-width:160px}
+
+/* trace */
+.trace{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.1fr);gap:20px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:8px 14px;margin:0;font-size:13px}
+.kv dt{color:var(--dim);font:11px/1.6 var(--mono);letter-spacing:.08em;text-transform:uppercase}
+.kv dd{margin:0;font-family:var(--mono);color:var(--text);text-align:right;overflow-wrap:anywhere}
+.fb{color:var(--amber)!important}
+.attempts{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.attempts li{display:grid;grid-template-columns:auto 1fr auto;gap:2px 10px;align-items:center;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:rgba(4,6,11,.35);font-size:13px}
+.attempts .st{width:9px;height:9px;border-radius:50%;background:var(--dim)}
+.attempts [data-s="ok"] .st{background:var(--green);box-shadow:0 0 8px var(--green)}
+.attempts [data-s="error"] .st{background:var(--red)}
+.attempts [data-s="timeout"] .st{background:var(--amber)}
+.attempts .nm{font-weight:650}
+.attempts .ms{font:11px var(--mono);color:var(--dim)}
+.attempts .dt{grid-column:2/4;color:var(--dim);font-size:12px}
+.attempts .winner{border-color:rgba(61,220,151,.35)}
+.pipe{margin:0;padding:0;list-style:none;font:12px/1.5 var(--mono);color:var(--muted);display:grid;gap:6px}
+.pipe li{position:relative;padding-left:18px;overflow-wrap:anywhere}
+.pipe li::before{content:"›";position:absolute;left:4px;color:var(--cyan)}
+.trace h4{margin:0 0 10px;font:700 10.5px/1.4 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+
+/* footer */
+footer{position:relative;z-index:1;border-top:1px solid var(--line);margin-top:20px;background:rgba(4,6,11,.6)}
+.foot{display:grid;grid-template-columns:1.4fr 1fr;gap:28px;padding:26px 24px 34px;font-size:13px;color:var(--muted)}
+.foot h4{margin:0 0 8px;font:700 11px/1.4 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--text)}
+.foot p{margin:0 0 8px}
+.foot .team{font:800 13px/1.4 var(--mono);letter-spacing:.14em;color:var(--cyan)}
+
+/* ---------- responsive ---------- */
+@media (max-width:1100px){.orb{display:none}}
+@media (max-width:960px){
+  .span-5,.span-7{grid-column:span 12}
+  .anim{grid-template-columns:1fr;min-height:0}
+  .trace{grid-template-columns:1fr}
+}
+@media (max-width:640px){
+  .wrap{padding:0 16px}
+  .topbar-in{height:58px}
+  .brand-text small{display:none}
+  .logo{width:30px;height:30px}
+  .status{display:none}
+  .ask{padding:32px 16px 28px}
+  .lead{font-size:15.5px}
+  .askbox{margin-top:24px;border-radius:16px}
+  .askbox textarea{padding:16px 16px 6px;min-height:96px}
+  .askbox-bar{padding:8px 8px 8px 16px}
+  .hint{display:none}
+  .askbox-bar{justify-content:flex-end}
+  .btn-primary{width:100%;justify-content:center}
+  .pillars{grid-template-columns:1fr;gap:10px;margin-top:30px}
+  .stats{gap:20px}
+  .stats dd{font-size:20px}
+  .anim{padding:20px 16px 32px;gap:20px}
+  .anim-frame{aspect-ratio:1/1}
+  .dash{padding:20px 16px 28px}
+  .dash-head{flex-direction:column;align-items:stretch}
+  .dash-head-actions{justify-content:flex-start}
+  .card{padding:16px}
+  .verdict-body{gap:16px}
+  .ring{width:100px;height:100px}
+  .phase-track{gap:6px}
+  .ph{padding:10px 8px}
+  .ph b{font-size:10.5px;letter-spacing:.08em}
+  .ph small{display:none}
+  .foot{grid-template-columns:1fr;padding:22px 16px 28px}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main" data-i18n="skip">Skip to content</a>
+<div class="stars" aria-hidden="true"></div>
+<div class="grid-bg" aria-hidden="true"></div>
+
+<header class="topbar">
+  <div class="wrap topbar-in">
+    <a class="brand" href="#" id="homeLink">
+      <svg class="logo" viewBox="0 0 40 40" aria-hidden="true">
+        <defs>
+          <radialGradient id="lg" cx="50%" cy="50%" r="50%">
+            <stop offset="55%" stop-color="#3d7bff" stop-opacity="0"/>
+            <stop offset="78%" stop-color="#8fd8ff"/>
+            <stop offset="100%" stop-color="#3d7bff" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <ellipse cx="20" cy="20" rx="18" ry="7" fill="none" stroke="#24345a" stroke-width="1.2" transform="rotate(-24 20 20)"/>
+        <circle cx="20" cy="20" r="12" fill="url(#lg)"/>
+        <circle cx="20" cy="20" r="7" fill="none" stroke="#ff9a4d" stroke-opacity=".35" stroke-width="2"/>
+        <circle cx="20" cy="20" r="2.4" fill="#c9d6e8"/>
+        <circle cx="35.5" cy="13" r="1.6" fill="#ffb347"/>
+      </svg>
+      <span class="brand-text"><strong>Flame in Freefall</strong><small data-i18n="tagline"></small></span>
+    </a>
+    <div class="top-right">
+      <a class="pill" id="backLink" href="/" style="text-decoration:none;color:inherit" data-i18n="backLink">◂ Back to the console</a>
+      <span class="pill status" id="statusPill" data-state="idle"><i></i><span id="statusText" data-i18n="statusIdle">Ready</span></span>
+      <div class="lang" role="group" aria-label="Language / Idioma">
+        <button type="button" data-lang="en" aria-pressed="true">EN</button>
+        <button type="button" data-lang="es" aria-pressed="false">ES</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <!-- ===================== STAGE 1 · ASK ===================== -->
+  <section id="stage-ask" class="stage" aria-labelledby="askTitle">
+    <div class="wrap ask">
+      <div class="ask-hero">
+        <div class="orb" aria-hidden="true"><span></span></div>
+        <p class="eyebrow"><span class="dot"></span><span data-i18n="askEyebrow"></span></p>
+        <h1 id="askTitle" tabindex="-1" data-i18n="askTitle"></h1>
+        <p class="lead" data-i18n="askLead"></p>
+      </div>
+
+      <form id="askForm" class="askbox" novalidate>
+        <label for="q" class="sr-only" data-i18n="qLabel"></label>
+        <textarea id="q" name="question" rows="3" maxlength="500" autocomplete="off" data-i18n-ph="placeholder"></textarea>
+        <div class="askbox-bar">
+          <span class="hint mono" data-i18n="enterHint"></span>
+          <button type="submit" class="btn-primary" id="submitBtn">
+            <span data-i18n="submit"></span>
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </form>
+
+      <div class="chips-wrap">
+        <p class="label" data-i18n="examples"></p>
+        <div class="chips" id="chips"></div>
+      </div>
+
+      <div class="pillars">
+        <article class="pillar" data-phase="PREVENT"><h3 data-i18n="PREVENT"></h3><p data-i18n="pPrevent"></p></article>
+        <article class="pillar" data-phase="DETECT"><h3 data-i18n="DETECT"></h3><p data-i18n="pDetect"></p></article>
+        <article class="pillar" data-phase="EXTINGUISH"><h3 data-i18n="EXTINGUISH"></h3><p data-i18n="pExtinguish"></p></article>
+      </div>
+
+      <dl class="stats">
+        <div><dt data-i18n="statRows"></dt><dd>1,982</dd></div>
+        <div><dt data-i18n="statPlatforms"></dt><dd>19</dd></div>
+        <div><dt data-i18n="statPhases"></dt><dd>3</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <!-- ===================== STAGE 2 · ANIMATION ===================== -->
+  <section id="stage-anim" class="stage" hidden aria-labelledby="animTitle">
+    <div class="wrap anim">
+      <div class="anim-frame">
+        <canvas id="flameCanvas" aria-hidden="true"></canvas>
+        <div class="hud hud-tl mono"><span class="rec"></span><span data-i18n="hudChamber"></span></div>
+        <div class="hud hud-tr mono">t+ <b id="hudT">0.00</b> s</div>
+        <div class="hud hud-bl mono">g ≈ 1×10⁻⁶ g₀<br>O₂ <b id="hudO2">—</b></div>
+        <div class="hud hud-br mono"><span data-i18n="hudFlame"></span><br>d² <span data-i18n="hudLaw"></span></div>
+      </div>
+      <div class="anim-side">
+        <p class="eyebrow" id="animTitle"><span class="dot"></span><span data-i18n="analyzing"></span></p>
+        <p class="anim-q" id="animQ"></p>
+        <ol class="steps" id="steps" aria-live="polite"></ol>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== STAGE 3 · DASHBOARD ===================== -->
+  <section id="stage-dash" class="stage" hidden aria-labelledby="dashQ">
+    <div class="wrap dash">
+      <div class="dash-head">
+        <div>
+          <p class="eyebrow"><span class="dot"></span><span data-i18n="yourQuestion"></span></p>
+          <h2 id="dashQ" tabindex="-1"></h2>
+        </div>
+        <div class="dash-head-actions">
+          <button type="button" class="btn-ghost" id="rerunBtn" hidden></button>
+          <button type="button" class="btn-ghost" id="newQ">↺ <span data-i18n="newQuestion"></span></button>
+        </div>
+      </div>
+
+      <div id="demoBanner" class="banner" role="note" hidden></div>
+
+      <div class="grid">
+        <section class="card span-5" aria-labelledby="h-verdict">
+          <header class="card-h"><h3 id="h-verdict" data-i18n="verdict"></h3><span class="pill conf" id="conf"></span></header>
+          <div class="verdict-body">
+            <svg class="ring" viewBox="0 0 132 132" role="img" id="ring">
+              <defs><linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8fe0ff"/><stop offset="1" stop-color="#3d7bff"/></linearGradient></defs>
+              <circle class="track" cx="66" cy="66" r="54" fill="none" stroke-width="11"/>
+              <circle class="val" id="ringVal" cx="66" cy="66" r="54" fill="none" stroke-width="11" transform="rotate(-90 66 66)"/>
+              <text x="66" y="62" text-anchor="middle" fill="#fff" style="font:800 22px var(--mono)" id="ringPct">—</text>
+              <text x="66" y="82" text-anchor="middle" fill="#5a6880" style="font:600 9.5px var(--mono);letter-spacing:.12em" id="ringCap"></text>
+            </svg>
+            <div>
+              <p class="v-headline" id="vHead">—</p>
+              <p class="v-label" id="vLabel"></p>
+              <p class="v-sum" id="vSum"></p>
+            </div>
+          </div>
+        </section>
+
+        <section class="card span-7" aria-labelledby="h-phase">
+          <header class="card-h"><h3 id="h-phase" data-i18n="phase"></h3></header>
+          <div class="phase-track" id="phaseTrack"></div>
+          <p class="phase-desc" id="phaseDesc"></p>
+        </section>
+
+        <section class="card span-7" aria-labelledby="h-interp">
+          <header class="card-h"><h3 id="h-interp" data-i18n="interpretation"></h3><span class="pill" id="interpModel"></span></header>
+          <div class="interp" id="interp"></div>
+          <p class="cite-hint" data-i18n="citeHint"></p>
+        </section>
+
+        <section class="card span-5" aria-labelledby="h-actions">
+          <header class="card-h"><h3 id="h-actions" data-i18n="actions"></h3></header>
+          <ol class="actions" id="actions"></ol>
+        </section>
+
+        <section class="card span-7 chart" aria-labelledby="h-oxy">
+          <header class="card-h"><h3 id="h-oxy" data-i18n="oxygen"></h3></header>
+          <p class="sub" data-i18n="oxygenSub"></p>
+          <div id="oxyChart"></div>
+        </section>
+
+        <section class="card span-5" aria-labelledby="h-dil">
+          <header class="card-h"><h3 id="h-dil" data-i18n="diluents"></h3></header>
+          <p class="sub" data-i18n="diluentsSub"></p>
+          <div class="dil" id="dil"></div>
+          <div class="scale" aria-hidden="true"><span>0%</span><span>50%</span><span>100%</span></div>
+        </section>
+
+        <section class="card span-12" aria-labelledby="h-ev">
+          <header class="card-h"><h3 id="h-ev" data-i18n="evidence"></h3><span class="pill" id="evCount"></span></header>
+          <div class="tbl-wrap" tabindex="0" aria-labelledby="h-ev">
+            <table>
+              <thead><tr id="evHead"></tr></thead>
+              <tbody id="evBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <div>
+      <h4 data-i18n="aiUseTitle"></h4>
+      <p data-i18n="aiUse1"></p>
+      <p data-i18n="aiUse2"></p>
+    </div>
+    <div>
+      <p class="team">TEAM OCEANPIXELS</p>
+      <p data-i18n="footAbout"></p>
+      <p data-i18n="footDisclaimer"></p>
+    </div>
+  </div>
+</footer>
+<div class="sr-only" aria-live="polite" id="live"></div>
+
+<script>
+'use strict';
+/* =============================================================================
+   CONFIG
+============================================================================= */
+const API_URL = '/api/ask_v2';  // OCEANPIXELS server: same engine + AI as the main page, in this page's JSON shape
+const API_TIMEOUT_MS = 120000;  // the AI step (Gemini) can take up to ~1 min; the engine alone answers in <1 s
+const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const MIN_ANIM_MS = REDUCED ? 500 : 2600;
+const PHASES = ['PREVENT', 'DETECT', 'EXTINGUISH'];
+
+/* =============================================================================
+   I18N
+============================================================================= */
+const I18N = {
+  en: {
+    skip: 'Skip to content',
+    tagline: 'Microgravity combustion intelligence',
+    askEyebrow: 'Mission query',
+    askTitle: 'Ask the fire data.',
+    askLead: 'Query 1,982 rows from 19 public microgravity combustion experiments (NASA Physical Sciences Informatics) to prevent, detect and extinguish fires aboard spacecraft.',
+    qLabel: 'Your question',
+    placeholder: 'e.g. Does methanol extinguish at 21% O₂?',
+    enterHint: 'ENTER to send · SHIFT+ENTER new line',
+    submit: 'Ignite analysis',
+    examples: 'Try an example',
+    chips: ['Does methanol extinguish at 21% O2?', 'Which diluent extinguishes the flame best?', 'At what oxygen level does extinction become unlikely?', 'How can we detect a dim microgravity flame early?'],
+    PREVENT: 'PREVENT', DETECT: 'DETECT', EXTINGUISH: 'EXTINGUISH',
+    pPrevent: 'Find the oxygen, pressure and fuel conditions where a fire can start and sustain itself.',
+    pDetect: 'Microgravity flames are spherical, dim and blue. Learn what to watch for, and when.',
+    pExtinguish: 'Compare diluents and conditions that actually put flames out in orbit.',
+    statRows: 'experiment rows', statPlatforms: 'experiments', statPhases: 'mission phases',
+    hudChamber: 'Combustion chamber · live', hudFlame: 'Flame: spherical · blue', hudLaw: 'law · burning',
+    analyzing: 'Analyzing',
+    steps: ['Scanning 1,982 experiment rows', 'Matching fuel, O₂ and diluent', 'Comparing similar tests', 'Composing verdict & citations'],
+    yourQuestion: 'Your question', newQuestion: 'New question', rerun: 'Re-run in English',
+    verdict: 'Verdict', phase: 'Mission phase', interpretation: 'AI interpretation', interpretationData: 'Reading of the evidence', actions: 'Recommended actions',
+    backLink: '◂ Back to the console', statusIdle: 'Ready', note: 'Note',
+    citeHint: 'Citations [R#] point to dataset rows, [E#] to experiment-level summaries. Click one to jump to its evidence.',
+    oxygen: 'Extinction vs oxygen · all rows of this fuel (not the N of 8 above)',
+    oxygenSub: 'Share of tests extinguished per O₂ level · marker size = number of tests',
+    o2Axis: 'O₂ (% vol)', extAxis: 'extinguished',
+    yourQuery: 'your query', threshold: '50% at ≈', noCross: 'no 50% crossing in range',
+    diluents: 'Diluent comparison',
+    diluentsSub: 'Extinguished / tests · whiskers = 95% Wilson interval',
+    bestEvidence: 'most data', topRate: 'top rate',
+    evidence: 'Evidence', rowsShown: n => `${n} items`,
+    cols: { id: 'ID', src: 'Experiment · source', fuel: 'Fuel', o2: 'O₂ %', dil: 'Diluent', p: 'P (atm)', d0: 'd₀ (mm)', out: 'Outcome', t: 't_ext (s)', note: 'Note' },
+    outcomes: { extinguished: 'Extinguished', sustained: 'Sustained', mixed: 'Mixed' },
+    kindExp: 'experiment set',
+    confidence: { high: 'High confidence', medium: 'Medium confidence', low: 'Low confidence' },
+    phaseDesc: {
+      PREVENT: 'This question is about conditions that allow a fire to start or keep burning. Use it to set safe operating limits.',
+      DETECT: 'This question is about recognizing a fire early. Microgravity flames can be nearly invisible to the eye.',
+      EXTINGUISH: 'This question is about putting a flame out: diluents, oxygen reduction and the conditions under which flames self-extinguish.'
+    },
+    phaseShort: { PREVENT: 'Set safe limits', DETECT: 'Spot it early', EXTINGUISH: 'Put it out' },
+    prio: { high: 'high', medium: 'medium', low: 'low' },
+    statusLive: 'Online', statusDemo: 'Server offline', statusBusy: 'Querying…',
+    demoBanner: 'The local server could not be reached, so no answer is shown. Start the app with INICIAR_WEB (or uv run python server.py) and ask again.',
+    langNote: 'Answer text is in the language it was generated in.',
+    empty: 'No data for this panel.',
+    emptyQ: 'Type a question first.',
+    ready: 'Results ready.',
+    aiUseTitle: 'Declaration of AI use',
+    aiUse1: 'The interpretation is written by an AI (Google Gemini) from the NASA tests; every number and citation is checked against those data before it is shown. If the AI is unavailable, the answer is built directly from the data, with the same numbers.',
+    aiUse2: 'AI output can be wrong. Check every claim against the cited rows before any operational decision. AI tools assisted with: the user interface (UI), the connectors, the subagent and the AI schema, and the database preparation; the rest was developed by the OCEANPIXELS team.',
+    footAbout: 'Built for the NASA Space Apps Challenge 2026 using public microgravity combustion experiment data (NASA Physical Sciences Informatics).',
+    footDisclaimer: 'Independent project. Not affiliated with, sponsored or endorsed by NASA.',
+    ringCap: 'EXTINGUISHED'
+  },
+  es: {
+    skip: 'Saltar al contenido',
+    tagline: 'Inteligencia de combustión en microgravedad',
+    askEyebrow: 'Consulta de misión',
+    askTitle: 'Pregúntale a los datos del fuego.',
+    askLead: 'Consulta 1.982 filas de 19 experimentos públicos de combustión en microgravedad (NASA Physical Sciences Informatics) para prevenir, detectar y extinguir incendios en naves espaciales.',
+    qLabel: 'Tu pregunta',
+    placeholder: 'p. ej. ¿El metanol se extingue al 21 % de O₂?',
+    enterHint: 'ENTER para enviar · SHIFT+ENTER nueva línea',
+    submit: 'Iniciar análisis',
+    examples: 'Prueba un ejemplo',
+    chips: ['¿Qué diluyente apaga mejor la llama?', '¿El metanol se extingue al 21% de O2?', '¿A qué nivel de oxígeno es improbable la extinción?', '¿Cómo detectar temprano una llama tenue en microgravedad?'],
+    PREVENT: 'PREVENIR', DETECT: 'DETECTAR', EXTINGUISH: 'EXTINGUIR',
+    pPrevent: 'Identifica las condiciones de oxígeno, presión y combustible en las que un fuego puede iniciarse y mantenerse.',
+    pDetect: 'Las llamas en microgravedad son esféricas, tenues y azules. Aprende qué vigilar y cuándo.',
+    pExtinguish: 'Compara diluyentes y condiciones que realmente apagan llamas en órbita.',
+    statRows: 'filas de experimentos', statPlatforms: 'experimentos', statPhases: 'fases de misión',
+    hudChamber: 'Cámara de combustión · en vivo', hudFlame: 'Llama: esférica · azul', hudLaw: 'ley · ardiendo',
+    analyzing: 'Analizando',
+    steps: ['Revisando 1.982 filas de experimentos', 'Cruzando combustible, O₂ y diluyente', 'Comparando ensayos parecidos', 'Redactando veredicto y citas'],
+    yourQuestion: 'Tu pregunta', newQuestion: 'Nueva pregunta', rerun: 'Volver a consultar en español',
+    verdict: 'Veredicto', phase: 'Fase de misión', interpretation: 'Interpretación de la IA', interpretationData: 'Lectura de la evidencia', actions: 'Acciones recomendadas',
+    backLink: '◂ Volver a la consola', statusIdle: 'Listo', note: 'Nota',
+    citeHint: 'Las citas [R#] remiten a filas del dataset y [E#] a resúmenes por experimento. Haz clic para ir a la evidencia.',
+    oxygen: 'Extinción vs oxígeno · todas las filas del combustible (no es el N de 8 de arriba)',
+    oxygenSub: 'Proporción de ensayos extinguidos por nivel de O₂ · tamaño del punto = número de ensayos',
+    o2Axis: 'O₂ (% vol)', extAxis: 'extinguidos',
+    yourQuery: 'tu consulta', threshold: '50 % en ≈', noCross: 'sin cruce del 50 % en el rango',
+    diluents: 'Comparación de diluyentes',
+    diluentsSub: 'Extinguidos / ensayos · bigotes = intervalo de Wilson al 95 %',
+    bestEvidence: 'más datos', topRate: 'mejor tasa',
+    evidence: 'Evidencia', rowsShown: n => `${n} elementos`,
+    cols: { id: 'ID', src: 'Experimento · fuente', fuel: 'Combustible', o2: 'O₂ %', dil: 'Diluyente', p: 'P (atm)', d0: 'd₀ (mm)', out: 'Resultado', t: 't_ext (s)', note: 'Nota' },
+    outcomes: { extinguished: 'Extinguida', sustained: 'Sostenida', mixed: 'Mixto' },
+    kindExp: 'conjunto de experimentos',
+    confidence: { high: 'Confianza alta', medium: 'Confianza media', low: 'Confianza baja' },
+    phaseDesc: {
+      PREVENT: 'La pregunta trata sobre las condiciones que permiten que un fuego empiece o siga ardiendo. Úsala para fijar límites seguros de operación.',
+      DETECT: 'La pregunta trata sobre reconocer un fuego a tiempo. Las llamas en microgravedad pueden ser casi invisibles a simple vista.',
+      EXTINGUISH: 'La pregunta trata sobre apagar una llama: diluyentes, reducción de oxígeno y condiciones en las que la llama se extingue sola.'
+    },
+    phaseShort: { PREVENT: 'Fijar límites', DETECT: 'Verlo a tiempo', EXTINGUISH: 'Apagarlo' },
+    prio: { high: 'alta', medium: 'media', low: 'baja' },
+    statusLive: 'En línea', statusDemo: 'Servidor apagado', statusBusy: 'Consultando…',
+    demoBanner: 'No se pudo contactar el servidor local, así que no se muestra ninguna respuesta. Abre la app con INICIAR_WEB (o uv run python server.py) y vuelve a preguntar.',
+    langNote: 'El texto de la respuesta se muestra en el idioma en que se generó.',
+    empty: 'Sin datos para este panel.',
+    emptyQ: 'Escribe una pregunta primero.',
+    ready: 'Resultados listos.',
+    aiUseTitle: 'Declaración de uso de IA',
+    aiUse1: 'La interpretación la redacta una IA (Google Gemini) a partir de los ensayos de la NASA; cada número y cita se comprueba con esos datos antes de mostrarse. Si la IA no está disponible, la respuesta se arma directamente con los datos, con los mismos números.',
+    aiUse2: 'La IA puede equivocarse. Revisa cada afirmación con las filas citadas antes de cualquier decisión operativa. Herramientas de IA apoyaron en: la interfaz de usuario (UI), los conectores, el subagente y el esquema de IA, y la preparación de la base de datos; el resto lo desarrolló el equipo OCEANPIXELS.',
+    footAbout: 'Creado para el NASA Space Apps Challenge 2026 con datos públicos de experimentos de combustión en microgravedad (NASA Physical Sciences Informatics).',
+    footDisclaimer: 'Proyecto independiente. Sin afiliación, patrocinio ni respaldo de la NASA.',
+    ringCap: 'EXTINGUIDOS'
+  }
+};
+
+/* =============================================================================
+   STATE + HELPERS
+============================================================================= */
+const state = { lang: 'en', stage: 'ask', question: '', data: null, source: null, busy: false };
+const $ = (s, r = document) => r.querySelector(s);
+const t = k => (I18N[state.lang] && I18N[state.lang][k] !== undefined ? I18N[state.lang][k] : I18N.en[k]);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const isNum = v => typeof v === 'number' && isFinite(v);
+const fmt = (v, d = 1) => isNum(v) ? v.toLocaleString(state.lang === 'es' ? 'es-ES' : 'en-US', { maximumFractionDigits: d, minimumFractionDigits: 0 }) : (v == null || v === '' ? '—' : String(v));
+const pct = v => isNum(v) ? Math.round(v * 100) + '%' : '—';
+const safeId = id => 'ev-' + String(id).replace(/[^\w-]/g, '');
+
+/** Tiny DOM builder. Text is always set via textContent (API content is never parsed as HTML). */
+function h(tag, attrs, ...kids) {
+  const n = document.createElement(tag);
+  if (attrs) for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === 'class') n.className = v;
+    else if (k === 'text') n.textContent = v;
+    else if (k === 'style') n.style.cssText = v;
+    else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
+    else if (k === 'dataset') Object.assign(n.dataset, v);
+    else n.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of kids.flat()) if (c != null && c !== false) n.append(c.nodeType ? c : document.createTextNode(String(c)));
+  return n;
+}
+const SVGNS = 'http://www.w3.org/2000/svg';
+function s(tag, attrs, text) {
+  const n = document.createElementNS(SVGNS, tag);
+  if (attrs) for (const [k, v] of Object.entries(attrs)) if (v != null) n.setAttribute(k, v);
+  if (text != null) n.textContent = text;
+  return n;
+}
+function announce(msg) { const l = $('#live'); l.textContent = ''; setTimeout(() => (l.textContent = msg), 30); }
+function parseO2(q) {
+  const m = String(q).match(/(\d{1,2}(?:[.,]\d+)?)\s*%/);
+  return m ? parseFloat(m[1].replace(',', '.')) : null;
+}
+function wilson(k, n, z = 1.96) {
+  if (!n) return [0, 0];
+  const p = k / n, d = 1 + z * z / n, c = p + z * z / (2 * n);
+  const r = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n));
+  return [clamp((c - r) / d, 0, 1), clamp((c + r) / d, 0, 1)];
+}
+
+
+
+/* =============================================================================
+   API
+============================================================================= */
+async function fetchAnswer(question, lang) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), API_TIMEOUT_MS);
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ question, lang }),
+      signal: ctrl.signal
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    validate(data);
+    return { data, source: 'api' };
+  } catch (err) {
+    console.warn('[flame-in-freefall] API unavailable:', err && err.message);
+    // No made-up numbers on stage: without the server the page shows an empty answer and the banner.
+    return { data: { question, lang, verdict: {}, evidence: [], interpretation: '' }, source: 'mock', error: err };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+function validate(d) {
+  if (!d || typeof d !== 'object') throw new Error('Response is not an object');
+  if (!d.verdict || typeof d.verdict !== 'object') throw new Error('Missing verdict');
+  if (!Array.isArray(d.evidence)) throw new Error('Missing evidence[]');
+}
+
+/* =============================================================================
+   RENDER — render(data, source)
+   `data` follows the JSON shape documented at the top of this file.
+   `source` is 'api' | 'mock' (controls the demo banner + status pill).
+============================================================================= */
+function render(data, source = 'api') {
+  if (!data) return;
+  const phase = PHASES.includes(String(data.phase).toUpperCase()) ? String(data.phase).toUpperCase() : 'EXTINGUISH';
+  $('#dashQ').textContent = data.question || state.question;
+  $('#demoBanner').hidden = source !== 'mock';
+  $('#demoBanner').textContent = t('demoBanner');
+  setStatus(source === 'mock' ? 'demo' : 'live');
+
+  const rerun = $('#rerunBtn');
+  const showRerun = source === 'api' && data.lang && data.lang !== state.lang;
+  rerun.hidden = !showRerun;
+  rerun.textContent = t('rerun');
+  rerun.title = t('langNote');
+
+  const evIndex = new Map((data.evidence || []).map(r => [String(r.id), r]));
+  renderVerdict(data.verdict || {});
+  renderPhase(phase);
+  renderInterpretation(data.interpretation || '', evIndex, data.model_trace);
+  renderActions(Array.isArray(data.actions) ? data.actions : []);
+  renderOxygen(data.oxygen);
+  renderDiluents(Array.isArray(data.diluents) ? data.diluents : []);
+  renderEvidence(data.evidence || []);
+}
+
+function renderVerdict(v) {
+  const num = Number(v.numerator), den = Number(v.denominator);
+  const has = isNum(num) && isNum(den) && den > 0;
+  const ratio = has ? clamp(num / den, 0, 1) : 0;
+  $('#vHead').textContent = v.headline || (has ? `${num}/${den}` : '—');
+  $('#vLabel').textContent = v.label || '';
+  $('#vSum').textContent = v.summary || '';
+  const c = ['high', 'medium', 'low'].includes(v.confidence) ? v.confidence : null;
+  const conf = $('#conf');
+  conf.hidden = !c;
+  if (c) { conf.dataset.c = c; conf.textContent = t('confidence')[c]; }
+  const ring = $('#ringVal'), C = 2 * Math.PI * 54;
+  ring.style.strokeDasharray = C;
+  ring.style.strokeDashoffset = C;
+  requestAnimationFrame(() => requestAnimationFrame(() => (ring.style.strokeDashoffset = C * (1 - ratio))));
+  $('#ringPct').textContent = has ? pct(ratio) : '—';
+  $('#ringCap').textContent = t('ringCap');
+  $('#ring').setAttribute('aria-label', has ? `${num} / ${den} (${pct(ratio)})` : '—');
+}
+
+function renderPhase(active) {
+  const track = $('#phaseTrack');
+  track.textContent = '';
+  PHASES.forEach(p => track.append(
+    h('div', { class: 'ph' + (p === active ? ' on' : ''), dataset: { phase: p }, 'aria-current': p === active ? 'step' : null },
+      h('b', { text: t(p) }), h('small', { text: t('phaseShort')[p] }))
+  ));
+  $('#phaseDesc').textContent = t('phaseDesc')[active];
+}
+
+function renderInterpretation(text, evIndex, trace) {
+  const box = $('#interp');
+  box.textContent = '';
+  const paras = String(text).split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+  if (!paras.length) { box.append(h('p', { class: 'empty', text: t('empty') })); }
+  for (const p of paras) {
+    const el = h('p');
+    for (const part of p.split(/(\[[A-Za-z]\d+\])/g)) {
+      const m = part.match(/^\[([A-Za-z]\d+)\]$/);
+      if (m && evIndex.has(m[1])) {
+        const row = evIndex.get(m[1]);
+        el.append(h('button', {
+          type: 'button', class: 'cite', text: m[1],
+          dataset: { kind: row.kind === 'experiment' ? 'experiment' : 'row' },
+          'aria-label': `${m[1]}: ${[row.fuel, row.o2_pct != null ? row.o2_pct + '% O₂' : null, row.outcome].filter(Boolean).join(', ')}`,
+          onclick: () => jumpToEvidence(m[1])
+        }));
+      } else if (part) el.append(part);
+    }
+    box.append(el);
+  }
+  // a plain badge only ("Answer based on the data" / "AI interpretation · checked against the data")
+  const who = trace && trace.answered_by ? trace.answered_by : '';
+  const pill = $('#interpModel');
+  pill.textContent = who || '';
+  pill.hidden = !who;
+  $('#h-interp').textContent = trace && trace.fallback_used ? t('interpretationData') : t('interpretation');
+}
+
+function jumpToEvidence(id) {
+  const row = document.getElementById(safeId(id));
+  if (!row) return;
+  row.scrollIntoView({ behavior: REDUCED ? 'auto' : 'smooth', block: 'center' });
+  row.classList.remove('flash');
+  void row.offsetWidth;
+  row.classList.add('flash');
+  row.focus({ preventScroll: true });
+}
+
+function renderActions(list) {
+  const ol = $('#actions');
+  ol.textContent = '';
+  if (!list.length) { ol.append(h('li', { class: 'empty', text: t('empty') })); return; }
+  const order = { high: 0, medium: 1, low: 2 };
+  [...list].sort((a, b) => (order[a.priority] ?? 3) - (order[b.priority] ?? 3)).forEach(a => {
+    const ph = PHASES.includes(a.phase) ? a.phase : null;
+    ol.append(h('li', null,
+      h('div', { class: 'a-meta' },
+        ph ? h('span', { class: 'tag', dataset: { phase: ph }, text: t(ph) }) : null,
+        a.priority ? h('span', { class: 'prio', dataset: { p: a.priority }, text: '● ' + (t('prio')[a.priority] || a.priority) }) : null),
+      h('p', { text: a.text || '' })));
+  });
+}
+
+/* ---------- Oxygen chart (pure SVG) ---------- */
+function niceStep(range, target = 6) {
+  const raw = range / target, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  for (const m of [1, 2, 2.5, 5, 10]) if (raw <= m * mag) return m * mag;
+  return 10 * mag;
+}
+function renderOxygen(ox) {
+  const box = $('#oxyChart');
+  box.textContent = '';
+  const bins = (ox && Array.isArray(ox.bins) ? ox.bins : [])
+    .map(b => ({ o2: Number(b.o2_pct), k: Number(b.extinguished), n: Number(b.total) }))
+    .filter(b => isNum(b.o2) && isNum(b.k) && isNum(b.n) && b.n > 0)
+    .sort((a, b) => a.o2 - b.o2);
+  if (!bins.length) { box.append(h('p', { class: 'empty', text: t('empty') })); return; }
+  bins.forEach(b => (b.r = clamp(b.k / b.n, 0, 1)));
+
+  // Size the viewBox to the container so labels stay legible on phones.
+  const W = Math.round(clamp(box.clientWidth || 640, 300, 680));
+  const H = W < 480 ? 260 : 300, m = { l: 58, r: 16, t: 40, b: 44 };
+  const q = ox && isNum(Number(ox.query_o2_pct)) && ox.query_o2_pct !== null ? Number(ox.query_o2_pct) : null;
+  let x0 = Math.min(...bins.map(b => b.o2)), x1 = Math.max(...bins.map(b => b.o2));
+  if (q != null) { x0 = Math.min(x0, q); x1 = Math.max(x1, q); }
+  const pad = (x1 - x0) * 0.06 || 1; x0 -= pad; x1 += pad;
+  const X = v => m.l + (v - x0) / (x1 - x0) * (W - m.l - m.r);
+  const Y = r => m.t + (1 - r) * (H - m.t - m.b);
+  const maxN = Math.max(...bins.map(b => b.n));
+
+  const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': t('oxygen') + ': ' + bins.map(b => `${fmt(b.o2)}% → ${b.k}/${b.n}`).join('; ') });
+  const defs = s('defs');
+  const lg = s('linearGradient', { id: 'areaGrad', x1: 0, y1: 0, x2: 0, y2: 1 });
+  lg.append(s('stop', { offset: 0, 'stop-color': '#5cc8ff', 'stop-opacity': .28 }), s('stop', { offset: 1, 'stop-color': '#5cc8ff', 'stop-opacity': 0 }));
+  defs.append(lg); svg.append(defs);
+
+  [0, .25, .5, .75, 1].forEach(r => {
+    svg.append(s('line', { class: 'gl', x1: m.l, x2: W - m.r, y1: Y(r), y2: Y(r) }));
+    svg.append(s('text', { x: m.l - 8, y: Y(r) + 4, 'text-anchor': 'end' }, Math.round(r * 100) + '%'));
+  });
+  const step = niceStep(x1 - x0);
+  for (let v = Math.ceil(x0 / step) * step; v <= x1 + 1e-9; v += step) {
+    svg.append(s('line', { class: 'ax', x1: X(v), x2: X(v), y1: H - m.b, y2: H - m.b + 5 }));
+    svg.append(s('text', { x: X(v), y: H - m.b + 18, 'text-anchor': 'middle' }, fmt(v)));
+  }
+  svg.append(s('line', { class: 'ax', x1: m.l, x2: W - m.r, y1: H - m.b, y2: H - m.b }));
+  svg.append(s('text', { x: (m.l + W - m.r) / 2, y: H - 6, 'text-anchor': 'middle' }, t('o2Axis')));
+  svg.append(s('text', { x: 0, y: 0, 'text-anchor': 'middle', transform: `translate(12 ${(m.t + H - m.b) / 2}) rotate(-90)` }, t('extAxis')));
+
+  // 50% threshold
+  svg.append(s('line', { class: 'th', x1: m.l, x2: W - m.r, y1: Y(.5), y2: Y(.5) }));
+  let cross = null;
+  for (let i = 0; i < bins.length - 1; i++) {
+    const a = bins[i], b = bins[i + 1];
+    if ((a.r - .5) * (b.r - .5) <= 0 && a.r !== b.r) { cross = a.o2 + (a.r - .5) / (a.r - b.r) * (b.o2 - a.o2); break; }
+  }
+
+  // area + line
+  const pts = bins.map(b => [X(b.o2), Y(b.r)]);
+  const line = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+  svg.append(s('path', { class: 'ar', d: `${line} L${pts[pts.length - 1][0].toFixed(1)} ${Y(0)} L${pts[0][0].toFixed(1)} ${Y(0)} Z` }));
+  const ln = s('path', { class: 'ln', d: line });
+  svg.append(ln);
+
+  // query marker
+  if (q != null) {
+    svg.append(s('line', { class: 'q', x1: X(q), x2: X(q), y1: m.t - 20, y2: H - m.b }));
+    const right = X(q) > W * 0.7;
+    svg.append(s('text', { class: 'qt', x: X(q) + (right ? -6 : 6), y: m.t - 24, 'text-anchor': right ? 'end' : 'start' }, `${t('yourQuery')} · ${fmt(q)}%`));
+  }
+  if (cross != null) {
+    const cx = X(cross), cy = Y(.5);
+    svg.append(s('path', { class: 'thd', d: `M${cx} ${cy - 6} L${cx + 6} ${cy} L${cx} ${cy + 6} L${cx - 6} ${cy} Z` }));
+    const right = cx > W * 0.66;
+    svg.append(s('text', { class: 'tht', x: cx + (right ? -10 : 10), y: cy - 10, 'text-anchor': right ? 'end' : 'start' }, `${t('threshold')} ${fmt(cross)}% O₂`));
+  } else {
+    svg.append(s('text', { x: W - m.r, y: Y(.5) - 6, 'text-anchor': 'end' }, t('noCross')));
+  }
+
+  // points
+  bins.forEach(b => {
+    const r = 4 + 6 * Math.sqrt(b.n / maxN);
+    const g = s('g');
+    g.append(s('title', null, `${fmt(b.o2)}% O₂ — ${b.k}/${b.n} ${t('extAxis')} (${pct(b.r)})`));
+    g.append(s('circle', { class: 'pt', cx: X(b.o2), cy: Y(b.r), r }));
+    g.append(s('text', { class: 'pl', x: X(b.o2), y: Y(b.r) - r - 5, 'text-anchor': 'middle' }, `${b.k}/${b.n}`));
+    svg.append(g);
+  });
+  box.append(svg);
+
+  if (!REDUCED && ln.getTotalLength) {
+    const L = ln.getTotalLength();
+    ln.style.strokeDasharray = L; ln.style.strokeDashoffset = L;
+    ln.getBoundingClientRect();
+    ln.style.transition = 'stroke-dashoffset 1.2s cubic-bezier(.2,.8,.2,1)';
+    requestAnimationFrame(() => (ln.style.strokeDashoffset = 0));
+  }
+}
+
+/* ---------- Diluent bars (HTML + CSS) ---------- */
+function renderDiluents(list) {
+  const box = $('#dil');
+  box.textContent = '';
+  const rows = list.map(d => ({ name: String(d.name), k: Number(d.extinguished), n: Number(d.total) }))
+    .filter(d => isNum(d.k) && isNum(d.n) && d.n > 0);
+  if (!rows.length) { box.append(h('p', { class: 'empty', text: t('empty') })); return; }
+  rows.forEach(d => { d.r = d.k / d.n; d.ci = wilson(d.k, d.n); });
+  const maxN = Math.max(...rows.map(d => d.n));
+  const maxR = Math.max(...rows.map(d => d.r));
+  rows.sort((a, b) => b.r - a.r);
+  rows.forEach(d => {
+    const fill = h('div', { class: 'dil-fill' });
+    const ci = h('div', { class: 'dil-ci', style: `left:${(d.ci[0] * 100).toFixed(1)}%;width:${((d.ci[1] - d.ci[0]) * 100).toFixed(1)}%`, title: `95% CI ${pct(d.ci[0])}–${pct(d.ci[1])}` });
+    box.append(h('div', { class: 'dil-row' },
+      h('span', { class: 'dil-name', text: d.name }),
+      h('div', { class: 'dil-track', role: 'img', 'aria-label': `${d.name}: ${d.k}/${d.n} (${pct(d.r)}), 95% CI ${pct(d.ci[0])}–${pct(d.ci[1])}` }, fill, ci),
+      h('div', { class: 'dil-meta' },
+        h('span', null, h('b', { text: `${d.k}/${d.n}` }), ` · ${pct(d.r)}`,
+          d.n === maxN ? h('span', { class: 'badge best', text: t('bestEvidence') }) : null,
+          d.r === maxR ? h('span', { class: 'badge top', text: t('topRate') }) : null),
+        h('span', { text: `CI ${pct(d.ci[0])}–${pct(d.ci[1])}` }))));
+    requestAnimationFrame(() => requestAnimationFrame(() => (fill.style.width = (d.r * 100).toFixed(1) + '%')));
+  });
+}
+
+/* ---------- Evidence table ---------- */
+function renderEvidence(rows) {
+  const c = t('cols');
+  const head = $('#evHead');
+  head.textContent = '';
+  [['id'], ['src'], ['fuel'], ['o2', 1], ['dil'], ['p', 1], ['out'], ['note']]
+    .forEach(([k, num]) => head.append(h('th', { scope: 'col', class: num ? 'num' : null, text: c[k] })));
+  const body = $('#evBody');
+  body.textContent = '';
+  if (!rows.length) { body.append(h('tr', null, h('td', { colspan: 8, class: 'empty', text: t('empty') }))); }
+  rows.forEach(r => {
+    const kind = r.kind === 'experiment' ? 'experiment' : 'row';
+    const outcome = ['extinguished', 'sustained', 'mixed'].includes(r.outcome) ? r.outcome : null;
+    const note = r.note || (kind === 'experiment' && isNum(r.ext) && isNum(r.n) ? `${r.ext}/${r.n} · ${pct(r.ext / r.n)}` : '');
+    body.append(h('tr', { id: safeId(r.id), class: 'kind-' + kind, tabindex: '-1' },
+      h('td', null, r.url ? h('a', { class: 'idc', href: r.url, target: '_blank', rel: 'noopener', text: r.id }) : h('span', { class: 'idc', text: r.id })),
+      h('td', null, String(r.platform || '—'), h('span', { class: 'exp', text: (r.experiment || '') + (kind === 'experiment' ? ` · ${t('kindExp')}` : '') })),
+      h('td', { text: r.fuel || '—' }),
+      h('td', { class: 'num', text: fmt(r.o2_pct) }),
+      h('td', { text: r.diluent || '—' }),
+      h('td', { class: 'num', text: fmt(r.pressure_atm) }),
+      h('td', null, outcome ? h('span', { class: 'out', dataset: { o: outcome }, text: t('outcomes')[outcome] }) : '—'),
+      h('td', { class: 'note', text: note || '—' })));
+  });
+  $('#evCount').textContent = t('rowsShown')(rows.length);
+}
+
+/* =============================================================================
+   FLAME ANIMATION (canvas) — spherical microgravity diffusion flame
+   No buoyancy → no teardrop. Blue reaction shell, faint soot shell,
+   fuel droplet shrinking per the d²-law, radially symmetric particles.
+============================================================================= */
+const Flame = (() => {
+  let cv, ctx, raf = 0, t0 = 0, last = 0, dpr = 1, running = false, parts = [];
+  const mkP = rand => ({ a: Math.random() * Math.PI * 2, r: rand ? Math.random() : 0, v: .05 + Math.random() * .1, s: .6 + Math.random() * 1.4 });
+  function resize() {
+    if (!cv) return;
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    const b = cv.getBoundingClientRect();
+    cv.width = Math.max(1, Math.round(b.width * dpr));
+    cv.height = Math.max(1, Math.round(b.height * dpr));
+  }
+  function init(canvas) {
+    cv = canvas; ctx = cv.getContext('2d');
+    parts = Array.from({ length: 80 }, () => mkP(true));
+    window.addEventListener('resize', () => { resize(); if (!running) draw(3, 0); });
+  }
+  function radial(cx, cy, r0, r1, stops) {
+    const g = ctx.createRadialGradient(cx, cy, Math.max(0, r0), cx, cy, Math.max(r0 + .1, r1));
+    stops.forEach(([o, c]) => g.addColorStop(o, c));
+    return g;
+  }
+  function disc(cx, cy, r, fill) { ctx.beginPath(); ctx.arc(cx, cy, Math.max(.1, r), 0, Math.PI * 2); ctx.fillStyle = fill; ctx.fill(); }
+  function draw(t, dt) {
+    const w = cv.width, h_ = cv.height, cx = w / 2, cy = h_ / 2;
+    const base = Math.min(w, h_) * .25;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, w, h_);
+
+    const ig = clamp((t - .3) / 1.3, 0, 1);
+    const grow = 1 - Math.pow(1 - ig, 3);
+    const breathe = 1 + .022 * Math.sin(t * 2.3) + .01 * Math.sin(t * 5.9);
+    const R = Math.max(1, base * grow * breathe);
+
+    // HUD reticle
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.strokeStyle = 'rgba(92,200,255,.16)'; ctx.lineWidth = 1 * dpr;
+    ctx.setLineDash([4 * dpr, 8 * dpr]); ctx.lineDashOffset = -t * 12 * dpr;
+    ctx.beginPath(); ctx.arc(0, 0, base * 1.7, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.rotate(t * .05);
+    for (let i = 0; i < 72; i++) {
+      const a = i / 72 * Math.PI * 2, long = i % 6 === 0, r0 = base * 1.86, r1 = r0 + (long ? 10 : 4) * dpr;
+      ctx.strokeStyle = long ? 'rgba(92,200,255,.35)' : 'rgba(92,200,255,.14)';
+      ctx.beginPath(); ctx.moveTo(Math.cos(a) * r0, Math.sin(a) * r0); ctx.lineTo(Math.cos(a) * r1, Math.sin(a) * r1); ctx.stroke();
+    }
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(92,200,255,.10)';
+    ctx.beginPath(); ctx.moveTo(cx - base * 2.2, cy); ctx.lineTo(cx - base * 1.95, cy); ctx.moveTo(cx + base * 1.95, cy); ctx.lineTo(cx + base * 2.2, cy); ctx.stroke();
+
+    ctx.globalCompositeOperation = 'lighter';
+    // ignition spark
+    if (t < 1) {
+      const a = t < .3 ? t / .3 : Math.max(0, 1 - (t - .3) / .7);
+      ctx.fillStyle = radial(cx, cy, 0, base * 1.1, [[0, `rgba(255,255,255,${.95 * a})`], [.12, `rgba(190,225,255,${.55 * a})`], [1, 'rgba(0,0,0,0)']]);
+      ctx.fillRect(0, 0, w, h_);
+    }
+    if (grow > 0) {
+      // outer halo
+      disc(cx, cy, R * 2, radial(cx, cy, R * .8, R * 2, [[0, 'rgba(40,110,255,0)'], [.15, `rgba(60,140,255,${.22 * grow})`], [1, 'rgba(0,0,0,0)']]));
+      // soot shell (faint, inside the blue sheet)
+      const soot = (.26 + .08 * Math.sin(t * 1.4)) * grow;
+      disc(cx, cy, R * .8, radial(cx, cy, R * .3, R * .8, [[0, 'rgba(255,140,50,0)'], [.62, `rgba(255,150,60,${soot})`], [1, 'rgba(255,110,40,0)']]));
+      // fuel vapour
+      disc(cx, cy, R * .55, radial(cx, cy, 0, R * .55, [[0, `rgba(120,90,255,${.10 * grow})`], [1, 'rgba(0,0,0,0)']]));
+      // blue reaction sheet
+      disc(cx, cy, R * 1.12, radial(cx, cy, R * .6, R * 1.12, [
+        [0, 'rgba(30,80,255,0)'], [.5, `rgba(50,120,255,${.22 * grow})`], [.78, `rgba(110,190,255,${.85 * grow})`],
+        [.86, `rgba(200,235,255,${.95 * grow})`], [1, 'rgba(60,140,255,0)']]));
+      // particles drifting radially (symmetric — no buoyant plume)
+      for (const p of parts) {
+        p.r += p.v * dt;
+        if (p.r > 1) Object.assign(p, mkP(false));
+        const rr = R * .95 + p.r * base * 1.1;
+        const al = (1 - p.r) * .55 * grow;
+        disc(cx + Math.cos(p.a) * rr, cy + Math.sin(p.a) * rr, p.s * dpr, `rgba(150,210,255,${al})`);
+      }
+    }
+    ctx.globalCompositeOperation = 'source-over';
+
+    // fiber + droplet (d² law over a 9 s cycle)
+    ctx.strokeStyle = 'rgba(200,215,235,.18)'; ctx.lineWidth = 1 * dpr;
+    ctx.beginPath(); ctx.moveTo(cx - base * 1.6, cy + base * .02); ctx.lineTo(cx + base * 1.6, cy - base * .02); ctx.stroke();
+    const life = (t % 9) / 9, d = base * .1 * Math.sqrt(Math.max(.12, 1 - .88 * life * grow));
+    disc(cx, cy, d, radial(cx - d * .3, cy - d * .3, 0, d * 1.3, [[0, '#e6eef8'], [.5, '#8494ab'], [1, '#2a3446']]));
+  }
+  function frame(now) {
+    if (!running) return;
+    const tt = (now - t0) / 1000, dt = Math.min(.05, (now - last) / 1000);
+    last = now;
+    draw(tt, dt);
+    const hud = $('#hudT'); if (hud) hud.textContent = tt.toFixed(2);
+    raf = requestAnimationFrame(frame);
+  }
+  return {
+    init,
+    start() {
+      resize();
+      parts = Array.from({ length: 80 }, () => mkP(true));
+      if (REDUCED) { draw(3, 0); return; }
+      running = true; t0 = last = performance.now();
+      cancelAnimationFrame(raf); raf = requestAnimationFrame(frame);
+    },
+    stop() { running = false; cancelAnimationFrame(raf); }
+  };
+})();
+
+/* =============================================================================
+   STAGES + FLOW
+============================================================================= */
+function showStage(name) {
+  state.stage = name;
+  ['ask', 'anim', 'dash'].forEach(n => ($('#stage-' + n).hidden = n !== name));
+  window.scrollTo({ top: 0, behavior: 'auto' });
+}
+function setStatus(kind) {
+  const pill = $('#statusPill');
+  pill.dataset.state = kind;
+  $('#statusText').textContent = kind === 'live' ? t('statusLive') : kind === 'demo' ? t('statusDemo') : kind === 'busy' ? t('statusBusy') : t('statusIdle');
+}
+let stepTimer = 0;
+function startSteps() {
+  const ol = $('#steps');
+  ol.textContent = '';
+  const items = t('steps').map(s_ => h('li', { text: s_ }));
+  items.forEach(li => ol.append(li));
+  let i = 0;
+  items[0].classList.add('active');
+  clearInterval(stepTimer);
+  stepTimer = setInterval(() => {
+    if (i < items.length - 1) { items[i].classList.replace('active', 'done'); i++; items[i].classList.add('active'); }
+  }, REDUCED ? 120 : 620);
+}
+function finishSteps() {
+  clearInterval(stepTimer);
+  document.querySelectorAll('#steps li').forEach(li => { li.classList.remove('active'); li.classList.add('done'); });
+}
+
+async function submit(raw) {
+  const q = String(raw || '').trim();
+  const form = $('#askForm');
+  if (!q) {
+    form.classList.remove('shake'); void form.offsetWidth; form.classList.add('shake');
+    $('#q').focus(); announce(t('emptyQ')); return;
+  }
+  if (state.busy) return;
+  state.busy = true; state.question = q;
+  $('#submitBtn').disabled = true;
+  setStatus('busy');
+
+  $('#animQ').textContent = q;
+  const o2 = parseO2(q);
+  $('#hudO2').textContent = o2 != null ? fmt(o2) + ' %' : '—';
+  showStage('anim');
+  Flame.start();
+  startSteps();
+
+  const [res] = await Promise.all([fetchAnswer(q, state.lang), sleep(MIN_ANIM_MS)]);
+  finishSteps();
+  await sleep(REDUCED ? 0 : 320);
+  Flame.stop();
+
+  state.data = res.data; state.source = res.source;
+  showStage('dash');
+  render(res.data, res.source);
+  $('#dashQ').focus({ preventScroll: true });
+  announce(t('ready'));
+  state.busy = false;
+  $('#submitBtn').disabled = false;
+}
+
+function renderChips() {
+  const box = $('#chips');
+  box.textContent = '';
+  t('chips').forEach(c => box.append(h('button', { type: 'button', class: 'chip', onclick: () => { $('#q').value = c; submit(c); } }, h('span', { class: 'fx', text: '›' }), c)));
+}
+
+function applyI18n() {
+  document.documentElement.lang = state.lang;
+  document.querySelectorAll('[data-i18n]').forEach(n => { const v = t(n.dataset.i18n); if (typeof v === 'string') n.textContent = v; });
+  document.querySelectorAll('[data-i18n-ph]').forEach(n => (n.placeholder = t(n.dataset.i18nPh)));
+  document.querySelectorAll('.lang button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === state.lang)));
+  $('#homeLink').setAttribute('aria-label', 'Flame in Freefall · ' + t('tagline'));
+  renderChips();
+  if (state.stage === 'anim') {
+    // relabel running steps without resetting progress
+    const lis = document.querySelectorAll('#steps li');
+    t('steps').forEach((s_, i) => lis[i] && (lis[i].textContent = s_));
+  }
+  if (state.stage === 'dash' && state.data) {
+    render(state.data, state.source);
+  } else if (state.source) setStatus(state.source === 'mock' ? 'demo' : 'live');
+}
+
+function setLang(lang) {
+  if (!I18N[lang] || lang === state.lang) return;
+  state.lang = lang;
+  try { localStorage.setItem('fif-lang', lang); } catch (_) {}
+  applyI18n();
+}
+
+function goHome() {
+  if (state.busy) return;
+  showStage('ask');
+  const q = $('#q');
+  q.focus();
+  q.select();
+}
+
+/* =============================================================================
+   BOOT
+============================================================================= */
+(function boot() {
+  try {
+    const saved = localStorage.getItem('fif-lang');
+    if (saved && I18N[saved]) state.lang = saved;
+    else if ((navigator.language || '').toLowerCase().startsWith('es')) state.lang = 'es';
+  } catch (_) {}
+  Flame.init($('#flameCanvas'));
+  applyI18n();
+
+  $('#askForm').addEventListener('submit', e => { e.preventDefault(); submit($('#q').value); });
+  $('#q').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(e.target.value); }
+  });
+  document.querySelectorAll('.lang button').forEach(b => b.addEventListener('click', () => setLang(b.dataset.lang)));
+  $('#newQ').addEventListener('click', goHome);
+  $('#homeLink').addEventListener('click', e => { e.preventDefault(); goHome(); });
+  $('#rerunBtn').addEventListener('click', () => submit(state.question));
+
+  // Re-draw the SVG chart when its container width changes.
+  let rz = 0, lastW = 0;
+  window.addEventListener('resize', () => {
+    clearTimeout(rz);
+    rz = setTimeout(() => {
+      const w = $('#oxyChart').clientWidth;
+      if (state.stage === 'dash' && state.data && Math.abs(w - lastW) > 8) { lastW = w; renderOxygen(state.data.oxygen); }
+    }, 150);
+  });
+
+  // Deep link: index.html?q=...
+  const qp = new URLSearchParams(location.search).get('q');
+  if (qp) { $('#q').value = qp; submit(qp); }
+})();
+</script>
+</body>
+</html>

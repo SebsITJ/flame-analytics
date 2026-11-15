@@ -1,0 +1,9 @@
+Third-party files in this folder (copied unchanged so the page works offline, no CDN):
+
+  vega.min.js         Vega            https://github.com/vega/vega            BSD 3-Clause License
+  vega-lite.min.js    Vega-Lite 6.x   https://github.com/vega/vega-lite       BSD 3-Clause License
+  vega-embed.min.js   Vega-Embed      https://github.com/vega/vega-embed      BSD 3-Clause License
+
+Copyright (c) the University of Washington Interactive Data Lab and the Vega contributors.
+The full BSD 3-Clause text is in each project's repository (LICENSE file).
+Downloaded from cdn.jsdelivr.net on 2026-11-15 for Flame in Freefall (team OCEANPIXELS).

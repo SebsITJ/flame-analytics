@@ -1,0 +1,13 @@
+[project]
+name = "flame-in-freefall"
+version = "0.1.0"
+description = "Evidence-first fire safety assistant over NASA PSI microgravity combustion experiments"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "streamlit>=1.50",
+    "pandas>=2.2",
+    "google-genai>=1.20",
+    "fastapi>=0.163.1",
+    "uvicorn>=0.54.0",
+]

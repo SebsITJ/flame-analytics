@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#050912">
+<title>FLAME ANALYTICS · Microgravity Research</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2c1 4 6 6 6 11a6 6 0 0 1-12 0c0-3 2-5 3-8 1 2 3 1 3-3z' fill='%23d95926'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="/static/skin.css">
+</head>
+<body>
+<div class="ff-page">
+  <header id="brand"></header>
+  <div id="simwarn" class="ff-banner ff-banner-warn" hidden></div>
+  <nav class="ff-tabs" role="tablist">
+    <button role="tab" class="ff-tab" data-tab="assistant" aria-selected="true"></button>
+    <button role="tab" class="ff-tab" data-tab="explorer" aria-selected="false"></button>
+    <button role="tab" class="ff-tab" data-tab="charts" aria-selected="false"></button>
+    <a class="ff-alt" id="alt-link" href="/panel"></a>
+  </nav>
+
+  <main>
+    <!-- ASSISTANT -->
+    <section id="tab-assistant" class="ff-tabpanel">
+      <div id="stage-ask">
+        <div class="ff-orb-scene" aria-hidden="true">
+          <div class="ff-orb-aura"></div>
+          <svg class="ff-orb" viewBox="0 0 600 600" role="presentation">
+            <defs>
+              <radialGradient id="ff-orb-core"><stop stop-color="#071827"/><stop offset=".72" stop-color="#071321"/><stop offset="1" stop-color="#02060e"/></radialGradient>
+              <linearGradient id="ff-orb-edge" x1=".1" y1="0" x2=".9" y2="1"><stop stop-color="#d6faff"/><stop offset=".24" stop-color="#4ccfff"/><stop offset=".46" stop-color="#123d74"/><stop offset=".68" stop-color="#087cfa"/><stop offset=".88" stop-color="#245bff"/><stop offset="1" stop-color="#9feaff"/></linearGradient>
+              <filter id="ff-orb-blur"><feGaussianBlur stdDeviation="15"/></filter>
+              <filter id="ff-orb-soft"><feGaussianBlur stdDeviation="5"/></filter>
+            </defs>
+            <path class="ff-orb-glow" d="M302 53 C405 34 509 105 532 225 C561 353 525 473 405 529 C286 582 150 527 90 412 C34 301 77 164 178 101 C217 77 264 63 302 53Z" fill="none" stroke="url(#ff-orb-edge)" stroke-width="28" opacity=".55" filter="url(#ff-orb-blur)"/>
+            <path class="ff-orb-shape" d="M302 53 C405 34 509 105 532 225 C561 353 525 473 405 529 C286 582 150 527 90 412 C34 301 77 164 178 101 C217 77 264 63 302 53Z" fill="url(#ff-orb-core)" stroke="url(#ff-orb-edge)" stroke-width="5"/>
+            <path d="M105 398 C168 523 291 558 413 509" fill="none" stroke="#258aff" stroke-width="9" opacity=".45" filter="url(#ff-orb-soft)"/>
+            <path d="M142 143 C226 55 370 46 464 145" fill="none" stroke="#85e9ff" stroke-width="6" opacity=".5" filter="url(#ff-orb-soft)"/>
+          </svg>
+        </div>
+        <div id="hero"></div>
+        <div class="ff-langs" role="radiogroup" aria-label="Language">
+          <button class="ff-lang" data-lang="en" role="radio">EN</button>
+          <button class="ff-lang" data-lang="es" role="radio">ES</button>
+        </div>
+        <div class="ff-lang-note" id="lang-note"></div>
+        <form id="ask-form" class="ff-form" autocomplete="off">
+          <label for="question" class="ff-sr" id="ask-label"></label>
+          <textarea id="question" rows="2" maxlength="1000"></textarea>
+          <div class="ff-form-row"><span id="ask-hint" class="ff-hint"></span>
+            <button type="submit" class="ff-btn ff-primary" id="ask-button"></button></div>
+        </form>
+        <div class="ff-chips">
+          <button class="ff-chip" data-kind="prevent"></button>
+          <button class="ff-chip" data-kind="detect"></button>
+          <button class="ff-chip" data-kind="extinguish"></button>
+        </div>
+        <div class="ff-pillars" id="pillars"></div>
+      </div>
+
+      <div id="stage-anim" hidden>
+        <div id="anim-loader" class="ff-loader"><i></i><span class="ff-mono" id="loader-text"></span></div>
+        <iframe id="anim-frame" title="mission" hidden></iframe>
+        <div class="ff-center st-key-see_results"><button class="ff-btn" id="see-results"></button></div>
+      </div>
+
+      <div id="stage-results" hidden>
+        <div class="ff-res-top">
+          <button class="ff-btn ff-primary" id="new-question"></button>
+          <div id="strip" class="ff-res-strip"></div>
+        </div>
+        <div id="lead"></div>
+        <div id="res-warnings"></div>
+        <section id="ai-panel" class="ff-ai"></section>
+        <details id="evidence" class="ff-exp ff-evidence">
+          <summary id="evidence-l"></summary>
+          <div class="ff-exp-body">
+            <div id="board"></div>
+            <section id="metric-chart"></section>
+            <div class="ff-expanders">
+              <details class="ff-exp"><summary id="exp-calc"></summary><div id="calc" class="ff-exp-body"></div></details>
+              <details class="ff-exp"><summary id="exp-written"></summary><div id="written" class="ff-exp-body ff-written"></div></details>
+              <details class="ff-exp"><summary id="exp-ranked"></summary><div id="ranked" class="ff-exp-body"></div></details>
+            </div>
+          </div>
+        </details>
+      </div>
+      <div id="stage-error" class="ff-banner ff-banner-err" hidden></div>
+    </section>
+
+    <!-- EXPLORER -->
+    <section id="tab-explorer" class="ff-tabpanel" hidden>
+      <div class="ff-filters">
+        <label class="ff-f-wide"><span id="f-search-l"></span><input id="f-search" type="search"></label>
+        <fieldset class="ff-f-phases"><legend id="f-phase-l"></legend><div id="f-phases"></div></fieldset>
+        <label><span id="f-fuel-l"></span><select id="f-fuel"><option value=""></option></select></label>
+        <label><span id="f-measure-l"></span><select id="f-measure"><option value=""></option></select></label>
+        <label><span id="f-o2-l"></span><span class="ff-range"><input id="f-o2-min" type="number" step="any" inputmode="decimal"> – <input id="f-o2-max" type="number" step="any" inputmode="decimal"></span></label>
+        <label><span id="f-p-l"></span><span class="ff-range"><input id="f-p-min" type="number" step="any" inputmode="decimal"> – <input id="f-p-max" type="number" step="any" inputmode="decimal"></span></label>
+      </div>
+      <div class="ff-exp-bar"><span id="exp-caption" class="ff-sub"></span><button class="ff-btn" id="exp-download"></button></div>
+      <div class="ff-table-wrap" id="exp-table"></div>
+      <div class="ff-center"><button class="ff-btn" id="exp-more" hidden></button></div>
+    </section>
+
+    <!-- CHARTS -->
+    <section id="tab-charts" class="ff-tabpanel" hidden>
+      <h3 id="ch-oxy-title" class="ff-h3"></h3>
+      <div id="ch-oxy" class="ff-chart"></div>
+      <p id="ch-oxy-cap" class="ff-sub"></p>
+      <h3 id="ch-cond-title" class="ff-h3"></h3>
+      <div id="ch-cond" class="ff-chart"></div>
+      <p id="ch-cond-cap" class="ff-sub"></p>
+    </section>
+  </main>
+
+  <footer id="footer"></footer>
+</div>
+<script src="/static/vendor/vega.min.js"></script>
+<script src="/static/vendor/vega-lite.min.js"></script>
+<script src="/static/vendor/vega-embed.min.js"></script>
+<script src="/static/app.js"></script>
+<script src="/static/skin.js"></script>
+</body>
+</html>

@@ -1,0 +1,114 @@
+FLAME IN FREEFALL - OCEANPIXELS (NASA Space Apps 2026)
+=====================================================
+
+Idioma: la app responde en ingles o espanol segun la pregunta.
+
+NUEVO: VERSION WEB (HTML). La app ahora es una pagina web (HTML/CSS/JS) servida por un
+pequeno servidor Python (server.py, FastAPI) en http://localhost:8600 . Doble clic en
+INICIAR_WEB_WINDOWS.bat (o INICIAR_WEB_MAC_LINUX.command). A mano:  uv run python server.py
+La clave de Gemini se lee SOLO en el servidor y nunca llega al navegador. En la version web
+el motor junta la evidencia (GATHER_MODELS=engine, 0 peticiones flash) y gemini-4-hydrogen
+interpreta (1 peticion por pregunta); si falla, los flash. La version Streamlit sigue como
+respaldo: RESPALDO_STREAMLIT_WINDOWS.bat / uv run streamlit run app.py (puerto 8501).
+Version v7b (v7 + dos modelos de Gemini con roles: flash junta datos, hydrogen interpreta). Tras enviar la pregunta veras una
+animacion: la pregunta cae en PREVENIR / DETECTAR / APAGAR, se ubica en el mapa
+de todos los experimentos y se cuentan las filas mas parecidas. Luego el tablero
+de resultados (avanza solo a los ~12 s, o con "Ver resultados"). Boton "Nueva pregunta" para empezar de nuevo.
+
+NUEVO EN v5: si la pregunta pide una metrica (velocidad de propagacion, duracion de
+llama, tasa de consumo, perdida de masa) aparece un grafico de barras debajo del
+tablero. Si la pregunta dice un % de O2 (ej. 21%), el grafico muestra solo filas a
++/- 1.5 puntos de ese nivel; si no hay, usa el nivel ensayado mas cercano y lo avisa.
+Sin % de O2 muestra todos los niveles. Ejemplo: "Cuanto dura la llama de metanol al 21% de oxigeno?"
+
+NUEVO EN v7 (IA que interpreta, no inventa): si hay clave de Gemini, debajo del
+tablero aparece "Interpretacion de la IA". Gemini solo puede pedir datos al motor
+(6 herramientas), cada frase cita filas R# o calculos E#, y un verificador revisa
+que todos los numeros esten en lo que devolvio el motor. Si algo falla (sin clave,
+sin internet, cuota 429, demora) responde el motor solo, con los mismos numeros.
+El desplegable "Como razono la IA" muestra el diagrama de pasos y las llamadas.
+
+NUEVO EN v7b (dos modelos): el MOTOR junta primero la evidencia base (0 peticiones).
+Luego gemini-3.8-flash puede pedir 1 vez datos extra (1 peticion) y gemini-4-hydrogen
+escribe la respuesta citada (1 peticion). Si hydrogen no tiene cupo o esta ocupado, o el
+verificador rechaza su borrador, un modelo flash la rehace con el mismo paquete de
+evidencia. La insignia dice quien hizo que: "Datos: ... -> interpretacion: ...".
+
+NUEVO EN v6 (revision externa): la misma pregunta en ingles o espanol da el mismo
+veredicto N/8. Si hay muchas filas igual de relevantes, las 8 son una muestra
+espaciada y la tarjeta lo dice. Ojo para el pitch: metanol al 21 % ahora da 7 de 8
+apagadas (antes 8/8 estaba inflado por la palabra "extinguish" de la pregunta).
+
+COMO CORRER LA APP (Windows)
+----------------------------
+1) Instalar uv (solo la primera vez). Abre PowerShell y pega:
+   powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+   Cierra y vuelve a abrir PowerShell.
+
+2) Descomprime el zip flame-in-freefall_OCEANPIXELS_html.zip
+
+3) Entra a la carpeta (cambia la ruta por donde la descomprimiste):
+   cd C:\Users\TU_USUARIO\Downloads\flame-in-freefall_OCEANPIXELS_html\flame-in-freefall
+
+4) Corre la app (version web):
+   uv run python server.py
+   (respaldo Streamlit: uv run streamlit run app.py  -> http://localhost:8501)
+   - La primera vez descarga Python y las librerias (1-3 min).
+   - Si pregunta un email, solo presiona Enter.
+
+5) Abre en el navegador:  http://localhost:8600
+
+Para detenerla: Ctrl + C en la terminal.
+
+MAC / LINUX
+-----------
+1) curl -LsSf https://astral.sh/uv/install.sh | sh
+2) cd ruta/a/flame-in-freefall
+3) uv run python server.py   (o: bash INICIAR_WEB_MAC_LINUX.command)
+4) http://localhost:8600
+
+GEMINI (OPCIONAL) - COMO PONER LA CLAVE
+---------------------------------------
+Sin clave la app funciona igual (respuestas calculadas de los datos NASA, "Respuesta del motor (sin IA)").
+Con clave, Gemini interpreta la evidencia del motor (datos extra: gemini-3.8-flash o
+gemini-3.6-flash; interpretacion: gemini-4-hydrogen y, si falla, los flash).
+1) Saca una clave gratis en https://aistudio.google.com/apikey (boton "Create API key").
+2) En la carpeta flame-in-freefall abre la carpeta .streamlit
+   (en Windows: si no la ves, en el Explorador activa Vista > Mostrar > Elementos ocultos).
+3) Copia el archivo secrets.toml.example y renombra la copia a:  secrets.toml
+   (ojo: que no quede "secrets.toml.txt"; activa Vista > Extensiones de nombre de archivo).
+4) Abrelo con el Bloc de notas y cambia  paste-your-key-here  por tu clave, entre las comillas:
+      GEMINI_API_KEY = "tu-clave-aqui"
+   Guarda y vuelve a abrir la app (INICIAR_WEB_WINDOWS). Tambien sirve un archivo .env con la linea GEMINI_API_KEY=tu-clave. En el tablero veras
+   "Datos: gemini-3.8-flash -> interpretacion: gemini-4-hydrogen · verificado por el motor".
+Alternativa sin archivo (PowerShell, solo esa ventana):
+   $env:GEMINI_API_KEY="tu-clave"; uv run python server.py
+NUNCA subas secrets.toml a GitHub ni mandes la clave por chat (ya esta en .gitignore).
+Nivel gratis (medido el 15 nov 2026): cada modelo tiene su propio cupo de 20 peticiones
+al dia por proyecto (gemini-4-hydrogen y gemini-3.6-flash medidos; gemini-3.8-flash: 20 al
+dia y 5 por minuto segun reportes). v7b usa 1 peticion de hydrogen por pregunta: unas 20
+respuestas de hydrogen al dia (v7 gastaba 3-5 por pregunta: 4-6 al dia). El cupo se renueva
+a la medianoche del Pacifico = 03:00 hora Colombia. NO gastes preguntas de prueba el dia
+de la presentacion. Si sale "Respuesta del motor (sin IA)", la app sigue con el motor (mismos numeros).
+Cambiar los roles (PowerShell, antes de "uv run ..."):
+   $env:GATHER_MODELS="engine"          (sin flash: 0 peticiones extra, el motor junta todo)
+   $env:GATHER_MODELS="gemini-3.6-flash" (si 3.8-flash esta saturado / lento)
+   $env:INTERPRET_MODELS="gemini-4-hydrogen,gemini-3.8-flash,gemini-3.6-flash"
+Si un modelo da 429 (cupo) se salta 15 min; si da 503/504 o tarda, se salta 3 min.
+
+PARA PRESENTAR
+--------------
+Para que la animacion espere hasta que presiones "Ver resultados":
+   Windows PowerShell:  $env:FLAME_ANIM_SECONDS=120; uv run python server.py
+   Mac/Linux:           FLAME_ANIM_SECONDS=120 uv run python server.py
+En la animacion tambien hay botones "Repetir" y "Saltar".
+
+PRUEBAS (OPCIONAL)
+------------------
+uv run --with pytest pytest tests
+
+PROBLEMAS COMUNES
+-----------------
+- "uv no se reconoce": cierra y abre de nuevo la terminal tras instalar uv.
+- "address already in use" (puerto 8600 ocupado): la app ya esta abierta, o usa otro puerto:
+  PowerShell: $env:FLAME_PORT=8601; uv run python server.py   y abre http://localhost:8601
