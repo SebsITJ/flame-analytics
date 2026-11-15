@@ -1,4 +1,4 @@
-# 🔥 Flame in Freefall — OCEANPIXELS
+# Flame Analytics
 
 **Evidence-based decision-support tool built on NASA PSI microgravity combustion data.**
 Built for the NASA Space Apps Challenge 2026 by the OCEANPIXELS team.
